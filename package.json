@@ -1,7 +1,7 @@
 {
   "name": "Commodities AI",
   "productName": "Commodities AI",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "AI Chat Application",
   "main": "src/index.js",
   "scripts": {
