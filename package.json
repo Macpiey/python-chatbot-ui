@@ -1,7 +1,7 @@
 {
   "name": "Commodities AI",
   "productName": "Commodities AI",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "AI Chat Application",
   "main": "src/index.js",
   "scripts": {
@@ -22,7 +22,11 @@
     "setup:mac": "node scripts/build-dmg-installer.js",
     "package:optimized": "npm run build:prod && electron-forge package",
     "build:setup": "npm run package && npm run setup:win && npm run setup:mac",
-    "setup:assets": "node scripts/setup-assets.js"
+    "setup:assets": "node scripts/setup-assets.js",
+    "release": "node scripts/release.js",
+    "release:patch": "node scripts/release.js --patch",
+    "release:minor": "node scripts/release.js --minor",
+    "release:major": "node scripts/release.js --major"
   },
   "keywords": [],
   "author": {
