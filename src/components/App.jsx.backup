@@ -1,0 +1,1117 @@
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { v4 as uuidv4 } from "uuid";
+import {
+  FiSend,
+  FiSquare,
+  FiPlus,
+  FiMenu,
+  FiMoon,
+  FiSun,
+  FiWifi,
+  FiWifiOff,
+} from "react-icons/fi";
+import EnhancedMessage from "./EnhancedMessage";
+import ChartRenderer from "./ChartRenderer";
+import MarkdownStructuredMessage from "./MarkdownStructuredMessage";
+import ClarificationMessage from "./ClarificationMessage";
+import ChartTestComponent from "./ChartTestComponent";
+
+const API_URL = "http://106.51.142.108:8000/chatstream";
+
+const USER_ID = "PY09879";
+
+const generateSessionId = () => {
+  const timestamp = Date.now();
+  const random = Math.floor(Math.random() * 10000);
+  return `SES${timestamp}${random}`;
+};
+
+function App() {
+  const [input, setInput] = useState("");
+  const initialConvId = uuidv4();
+  const initialSessionId = generateSessionId();
+  const [conversations, setConversations] = useState([
+    { id: initialConvId, title: "New Chat", messages: [], sessionId: initialSessionId },
+  ]);
+  const [currentConversation, setCurrentConversation] = useState(initialConvId);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [typingText, setTypingText] = useState("");
+
+  const [activeTypingConversation, setActiveTypingConversation] =
+    useState(null);
+  const [apiConnected, setApiConnected] = useState(true);
+  const [connectionError, setConnectionError] = useState(false);
+  const [testMode, setTestMode] = useState(false);
+
+  const messagesEndRef = useRef(null);
+  const typingIntervalRef = useRef(null);
+  const pendingResponsesRef = useRef({});
+  const requestQueueRef = useRef([]);
+  const abortControllersRef = useRef({});
+
+  const currentMessages = React.useMemo(() => {
+    if (currentConversation === null) return [];
+    const conversation = conversations.find(
+      (conv) => conv.id === currentConversation
+    );
+    return conversation ? conversation.messages : [];
+  }, [conversations, currentConversation]);
+
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [currentMessages, typingText]);
+
+  const formatTime = useCallback((timestamp) => {
+    return new Date(timestamp).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, []);
+
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+  };
+
+  const clearTypingAnimation = () => {
+    if (typingIntervalRef.current) {
+      clearInterval(typingIntervalRef.current);
+      typingIntervalRef.current = null;
+    }
+  };
+
+  const updateConversationTitle = (convId, message) => {
+    setConversations((prevConversations) =>
+      prevConversations.map((conv) => {
+        if (conv.id === convId && conv.title === "New Chat") {
+          const words = message.text.split(" ").slice(0, 4).join(" ");
+          const title =
+            words.length > 30 ? words.substring(0, 30) + "..." : words;
+          return { ...conv, title: title || "New Chat" };
+        }
+        return conv;
+      })
+    );
+  };
+
+  const handleApiError = (_, conversationId = null) => {
+    const convId = conversationId || currentConversation;
+    if (convId === null) {
+      console.log("Cannot handle API error for null conversation");
+      return;
+    }
+    if (pendingResponsesRef.current[convId]?.received) {
+      console.log(
+        `Already received a response for conversation ${convId}, not showing error`
+      );
+      return;
+    }
+    clearTypingAnimation();
+    setIsTyping(false);
+    setTypingText("");
+    setActiveTypingConversation(null);
+    if (pendingResponsesRef.current[convId]) {
+      pendingResponsesRef.current[convId].received = true;
+      if (pendingResponsesRef.current[convId].timeoutId) {
+        clearTimeout(pendingResponsesRef.current[convId].timeoutId);
+        pendingResponsesRef.current[convId].timeoutId = null;
+      }
+    }
+    const errorMessage = {
+      id: Date.now(),
+      text: "Sorry, I couldn't get a response from the AI service. Please check your internet connection and try again.",
+      timestamp: Date.now(),
+      sender: "system",
+    };
+    setConversations((prevConversations) =>
+      prevConversations.map((conv) => {
+        if (conv.id === convId) {
+          return {
+            ...conv,
+            messages: [...conv.messages, errorMessage],
+          };
+        }
+        return conv;
+      })
+    );
+  };
+
+  const sendMessageToAPI = async (message, conversationId) => {
+    if (conversationId === null) {
+      console.error("Cannot send message for null conversation");
+      return false;
+    }
+
+    const conversation = conversations.find(conv => conv.id === conversationId);
+    if (!conversation) {
+      console.error("Conversation not found");
+      return false;
+    }
+
+    try {
+      if (pendingResponsesRef.current[conversationId]) {
+        console.log(`Clearing existing pending response for conversation ${conversationId}`);
+        if (abortControllersRef.current[conversationId]) {
+          abortControllersRef.current[conversationId].abort();
+          delete abortControllersRef.current[conversationId];
+        }
+        delete pendingResponsesRef.current[conversationId];
+      }
+
+      const abortController = new AbortController();
+      abortControllersRef.current[conversationId] = abortController;
+
+      const requestBody = {
+        message: message,
+        user_id: USER_ID,
+        session_id: conversation.sessionId
+      };
+
+      console.log("Sending HTTP request:", JSON.stringify(requestBody, null, 2));
+
+      pendingResponsesRef.current[conversationId] = {
+        received: false,
+        timeoutId: setTimeout(() => {
+          console.error(`Timeout for conversation ${conversationId}`);
+          abortController.abort();
+          handleApiError(null, conversationId);
+
+          if (conversationId === activeTypingConversation) {
+            setIsTyping(false);
+            setTypingText("");
+            setActiveTypingConversation(null);
+          }
+        }, 120000),
+      };
+
+      requestQueueRef.current.push(conversationId);
+
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+        signal: abortController.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      await processStreamingResponse(response, conversationId);
+
+      console.log(`Message sent for conversation ${conversationId}`);
+      return true;
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('Request was aborted');
+        return false;
+      }
+      console.error("Error sending message:", error);
+      setConnectionError(true);
+      handleApiError(null, conversationId);
+      return false;
+    } finally {
+      if (abortControllersRef.current[conversationId]) {
+        delete abortControllersRef.current[conversationId];
+      }
+    }
+  };
+
+  // Helper function to check if message contains filtered tool names
+  const shouldFilterMessage = (text) => {
+    // Temporarily disable filtering to fix the message display issue
+    return false;
+  };
+
+  const processStreamingResponse = async (response, conversationId) => {
+    try {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let stepsData = null;
+      let messageText = '';
+      let clarificationText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        let currentEvent = null;
+
+        for (const line of lines) {
+          if (line.trim() === '') continue;
+
+          console.log("Processing line:", line);
+
+          if (line.startsWith('event:')) {
+            currentEvent = line.substring(6).trim();
+            console.log("SSE event type:", currentEvent);
+          } else if (line.startsWith('data:')) {
+            const dataContent = line.substring(5).trim();
+            console.log("SSE data content:", dataContent, "for event:", currentEvent);
+
+            if (currentEvent === 'ping' || dataContent.includes(':ping')) {
+              console.log("Skipping ping event");
+              continue;
+            }
+            if (currentEvent === 'steps') {
+              try {
+                const data = JSON.parse(dataContent);
+                console.log("Received steps data:", JSON.stringify(data, null, 2));
+                if (data.status === "success" && data.action === "Database_response" && data.result) {
+                  stepsData = data.result;
+                  console.log("Processing steps data:", stepsData);
+                  if (stepsData.summary || stepsData.chart || stepsData.table || stepsData.raw_data) {
+                    processStepsData(stepsData, conversationId);
+                  }
+                }
+              } catch (parseError) {
+                console.error("Error parsing steps data:", parseError);
+              }
+            }
+            else if (currentEvent === 'message') {
+              if (dataContent && !dataContent.includes(':ping') && !dataContent.includes('ping -')) {
+                const cleanedContent = dataContent.replace(/: ping - \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+\+\d{2}:\d{2}/g, '').trim();
+                if (cleanedContent) {
+                  messageText += cleanedContent;
+                  console.log("Message text received:", cleanedContent);
+
+                  // Update typing animation with current text
+                  setTypingText(messageText);
+                }
+              }
+            }
+            else if (currentEvent === 'clarification') {
+              if (dataContent && !dataContent.includes(':ping') && !dataContent.includes('ping -')) {
+                const cleanedContent = dataContent.replace(/: ping - \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+\+\d{2}:\d{2}/g, '').trim();
+                if (cleanedContent) {
+                  clarificationText += cleanedContent;
+                  console.log("Clarification text received:", cleanedContent);
+                  console.log("Total clarification text so far:", JSON.stringify(clarificationText));
+
+                  // Don't interfere with message typing animation - clarification will be processed at the end
+                }
+              }
+            }
+            else if (!currentEvent || currentEvent === '') {
+              try {
+                const data = JSON.parse(dataContent);
+                console.log("Received JSON data without event:", JSON.stringify(data, null, 2));
+
+                if (data.status === "success" && data.action === "Database_response" && data.result) {
+                  stepsData = data.result;
+                  console.log("Processing steps data from JSON:", stepsData);
+
+                  if (stepsData.summary || stepsData.chart || stepsData.table || stepsData.raw_data) {
+                    processStepsData(stepsData, conversationId);
+                  }
+                }
+                else if (data.text) {
+                  messageText += data.text;
+                  console.log("JSON message text received:", data.text);
+                }
+              } catch (parseError) {
+                if (dataContent && !dataContent.includes(':ping') && !dataContent.includes('ping -')) {
+                  const cleanedContent = dataContent.replace(/: ping - \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+\+\d{2}:\d{2}/g, '').trim();
+                  if (cleanedContent) {
+                    messageText += cleanedContent;
+                    console.log("Plain text message received:", cleanedContent);
+                  }
+                }
+              }
+            }
+          } else {
+            try {
+              const data = JSON.parse(line);
+              console.log("Received regular JSON data:", JSON.stringify(data, null, 2));
+              if (data.status === "success" && data.action === "Database_response" && data.result) {
+                stepsData = data.result;
+                console.log("Processing steps data from regular JSON:", stepsData);
+
+                if (stepsData.summary || stepsData.chart || stepsData.table || stepsData.raw_data) {
+                  processStepsData(stepsData, conversationId);
+                }
+              }
+              else if (typeof data === 'string' || data.text) {
+                messageText += typeof data === 'string' ? data : data.text;
+                console.log("Regular JSON message text received:", messageText);
+              }
+            } catch (parseError) {
+              const textLine = line.trim();
+              if (textLine && !textLine.includes(':ping') && !textLine.includes('ping -')) {
+                const cleanedLine = textLine.replace(/: ping - \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+\+\d{2}:\d{2}/g, '').trim();
+                if (cleanedLine) {
+                  messageText += cleanedLine + '\n';
+                  console.log("Plain text received:", cleanedLine);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      if (pendingResponsesRef.current[conversationId]) {
+        pendingResponsesRef.current[conversationId].received = true;
+        clearTimeout(pendingResponsesRef.current[conversationId].timeoutId);
+        delete pendingResponsesRef.current[conversationId];
+      }
+
+      clearTypingAnimation();
+      setIsTyping(false);
+      setTypingText("");
+      setActiveTypingConversation(null);
+
+      if (messageText.trim()) {
+        // Split message by sentences and filter out tool usage sentences
+        const sentences = messageText.split(/(?<=[.!?])\s+/);
+        const filteredSentences = sentences.filter(sentence => !shouldFilterMessage(sentence));
+        const cleanedMessage = filteredSentences.join(' ').trim();
+
+        if (cleanedMessage) {
+          // Check if the message contains any embedded JSON
+          const hasEmbeddedJSON = cleanedMessage.includes('{"report":') ||
+                                 (cleanedMessage.includes('"action": "Database_response"') &&
+                                  cleanedMessage.includes('"raw_data":'));
+
+          if (hasEmbeddedJSON) {
+            // Split the message into separate parts and filter each part
+            const messages = splitMessageWithEmbeddedJSON(cleanedMessage);
+            const filteredMessages = messages.filter(msg => !shouldFilterMessage(msg.text));
+
+            if (filteredMessages.length > 0) {
+              setConversations((prevConversations) =>
+                prevConversations.map((conv) => {
+                  if (conv.id === conversationId) {
+                    return {
+                      ...conv,
+                      messages: [...conv.messages, ...filteredMessages],
+                    };
+                  }
+                  return conv;
+                })
+              );
+            }
+          } else {
+          const messageType = "text";
+
+          if (stepsData) {
+            console.log("Adding AI analysis after structured response:", messageText.trim());
+
+            const analysisResponse = {
+              id: Date.now() + 1,
+              text: messageText.trim(),
+              timestamp: Date.now(),
+              sender: "ai",
+              type: messageType,
+            };
+
+            setConversations((prevConversations) =>
+              prevConversations.map((conv) => {
+                if (conv.id === conversationId) {
+                  return {
+                    ...conv,
+                    messages: [...conv.messages, analysisResponse],
+                  };
+                }
+                return conv;
+              })
+            );
+          } else {
+            const aiResponse = {
+              id: Date.now(),
+              text: messageText.trim(),
+              timestamp: Date.now(),
+              sender: "ai",
+              type: messageType,
+            };
+
+            console.log("Adding response with type:", messageType, aiResponse);
+
+            setConversations((prevConversations) => {
+              console.log("Before adding regular message, current messages count:", prevConversations.find(c => c.id === conversationId)?.messages?.length || 0);
+              const updated = prevConversations.map((conv) => {
+                if (conv.id === conversationId) {
+                  const newConv = {
+                    ...conv,
+                    messages: [...conv.messages, aiResponse],
+                  };
+                  console.log("After adding regular message, new messages count:", newConv.messages.length);
+                  return newConv;
+                }
+                return conv;
+              });
+              return updated;
+            });
+          }
+        }
+        } // Close the else block for filtered messages
+      }
+
+      // Process clarification text if available
+      if (clarificationText.trim()) {
+        console.log("Processing clarification text:", clarificationText.trim());
+
+        const clarificationMessage = {
+          id: Date.now() + 2, // Ensure unique ID
+          text: clarificationText.trim(),
+          timestamp: Date.now(),
+          sender: "ai",
+          type: "clarification",
+        };
+
+        setConversations((prevConversations) => {
+          console.log("Before adding clarification, current messages count:", prevConversations.find(c => c.id === conversationId)?.messages?.length || 0);
+          const updated = prevConversations.map((conv) => {
+            if (conv.id === conversationId) {
+              const newConv = {
+                ...conv,
+                messages: [...conv.messages, clarificationMessage],
+              };
+              console.log("After adding clarification, new messages count:", newConv.messages.length);
+              console.log("All message types:", newConv.messages.map(m => `${m.id}: ${m.type || 'no-type'}`));
+              return newConv;
+            }
+            return conv;
+          });
+          return updated;
+        });
+          }
+        }
+      }
+
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('Streaming response was aborted');
+        return;
+      }
+      console.error("Error processing streaming response:", error);
+      handleApiError(null, conversationId);
+    }
+  };
+
+  const transformDataForCharts = (rawData) => {
+    try {
+      if (!rawData || !Array.isArray(rawData)) {
+        console.log("No raw data to transform");
+        return null;
+      }
+
+      console.log("Input raw data:", rawData);
+
+      if (rawData.length > 0 && typeof rawData[0] === 'object') {
+        const monthNames = {
+          1: 'January', 2: 'February', 3: 'March', 4: 'April',
+          5: 'May', 6: 'June', 7: 'July', 8: 'August',
+          9: 'September', 10: 'October', 11: 'November', 12: 'December'
+        };
+
+        const processedData = rawData.map(item => {
+          const newItem = { ...item };
+
+          if (item.month && !item.monthName) {
+            newItem.monthName = monthNames[item.month] || `Month ${item.month}`;
+          }
+
+          if (!item.date && item.monthName) {
+            newItem.date = item.monthName;
+          }
+
+          return newItem;
+        });
+
+        if (processedData[0]?.month) {
+          processedData.sort((a, b) => a.month - b.month);
+        }
+
+        console.log("Processed data for charts:", processedData);
+        return processedData;
+      }
+
+      if (rawData.length > 0 && rawData[0].data && Array.isArray(rawData[0].data)) {
+        console.log("Detected nested data structure - flattening");
+
+        const flattenedData = {};
+
+        rawData.forEach(sourceData => {
+          const stateName = sourceData.state;
+          if (sourceData.data && Array.isArray(sourceData.data)) {
+            sourceData.data.forEach(dataPoint => {
+              const key = dataPoint.year || dataPoint.month || dataPoint.date || Object.keys(dataPoint)[0];
+              if (!flattenedData[key]) {
+                flattenedData[key] = { ...dataPoint };
+              }
+              flattenedData[key][stateName] = dataPoint.total_rainfall || dataPoint.value || dataPoint.rainfall;
+            });
+          }
+        });
+
+        const result = Object.values(flattenedData);
+        console.log("Flattened data:", result);
+        return result;
+      }
+
+      console.log("Returning data as-is");
+      return rawData;
+    } catch (error) {
+      console.error("Error transforming data:", error);
+      return rawData;
+    }
+  };
+
+  const processStepsData = (stepsData, conversationId) => {
+    try {
+      clearTypingAnimation();
+      setIsTyping(false);
+      setTypingText("");
+      setActiveTypingConversation(null);
+
+      // Check if the summary should be filtered
+      const summaryText = stepsData.summary || "";
+      if (summaryText && shouldFilterMessage(summaryText)) {
+        console.log("Filtering out structured message with tool names:", summaryText);
+        return; // Don't add this message to the conversation
+      }
+
+      let transformedRawData = null;
+      if (stepsData.raw_data && Array.isArray(stepsData.raw_data)) {
+        console.log("Raw data from API:", stepsData.raw_data);
+
+        transformedRawData = transformDataForCharts(stepsData.raw_data);
+        console.log("Transformed data for charts:", transformedRawData);
+      }
+
+      const aiResponse = {
+        id: Date.now(),
+        text: summaryText,
+        timestamp: Date.now(),
+        sender: "ai",
+        chart: stepsData.chart || null,
+        table: stepsData.table || null,
+        rawData: transformedRawData,
+        type: "structured",
+      };
+
+      console.log("Adding structured response:", aiResponse);
+
+      setConversations((prevConversations) =>
+        prevConversations.map((conv) => {
+          if (conv.id === conversationId) {
+            return {
+              ...conv,
+              messages: [...conv.messages, aiResponse],
+            };
+          }
+          return conv;
+        })
+      );
+    } catch (error) {
+      console.error("Error processing steps data:", error);
+    }
+  };
+
+  const splitMessageWithEmbeddedJSON = (messageText) => {
+    const messages = [];
+    let baseTimestamp = Date.now();
+
+    // Look for all JSON patterns in the text
+    const jsonPattern = /\{"action":\s*"Database_response".*?"raw_data":\s*\[.*?\]\s*\}/gs;
+    const simpleReportPattern = /\{"report":\s*"[^"]*"\s*\}/gs;
+
+    let matches = [];
+    let match;
+
+    // Find all full format matches
+    while ((match = jsonPattern.exec(messageText)) !== null) {
+      matches.push({
+        content: match[0],
+        start: match.index,
+        end: match.index + match[0].length,
+        type: 'full'
+      });
+    }
+
+    // Find all simple report matches (only if no full matches found)
+    if (matches.length === 0) {
+      while ((match = simpleReportPattern.exec(messageText)) !== null) {
+        matches.push({
+          content: match[0],
+          start: match.index,
+          end: match.index + match[0].length,
+          type: 'simple'
+        });
+      }
+    }
+
+    if (matches.length > 0) {
+      // Sort matches by position
+      matches.sort((a, b) => a.start - b.start);
+
+      let currentPos = 0;
+
+      matches.forEach((match) => {
+        // Add text before this JSON
+        if (match.start > currentPos) {
+          const textSegment = messageText.substring(currentPos, match.start).trim();
+          if (textSegment && !shouldFilterMessage(textSegment)) {
+            messages.push({
+              id: baseTimestamp,
+              text: textSegment,
+              timestamp: baseTimestamp,
+              sender: "ai",
+              type: "text",
+            });
+            baseTimestamp += 1;
+          }
+        }
+
+        // Determine message type based on JSON content
+        let messageType = "text";
+        try {
+          const parsedJSON = JSON.parse(match.content);
+          if (parsedJSON.action === "Database_response" && parsedJSON.raw_data) {
+            messageType = "markdown_structured";
+          } else if (parsedJSON.report) {
+            messageType = "text"; // Simple report without chart data
+          }
+        } catch (e) {
+          console.error("Error parsing JSON:", e);
+        }
+
+        // Add the JSON content as a separate message (if not filtered)
+        const jsonText = messageType === "markdown_structured" ? match.content : (JSON.parse(match.content).report || match.content);
+        if (!shouldFilterMessage(jsonText)) {
+          messages.push({
+            id: baseTimestamp,
+            text: jsonText,
+            timestamp: baseTimestamp,
+            sender: "ai",
+            type: messageType,
+          });
+          baseTimestamp += 1;
+        }
+
+        currentPos = match.end;
+      });
+
+      // Add remaining text after last JSON
+      if (currentPos < messageText.length) {
+        const remainingText = messageText.substring(currentPos).trim();
+        if (remainingText && !shouldFilterMessage(remainingText)) {
+          messages.push({
+            id: baseTimestamp,
+            text: remainingText,
+            timestamp: baseTimestamp,
+            sender: "ai",
+            type: "text",
+          });
+        }
+      }
+    } else {
+      // No JSON found, treat as regular text (if not filtered)
+      if (!shouldFilterMessage(messageText)) {
+        messages.push({
+          id: baseTimestamp,
+          text: messageText,
+          timestamp: baseTimestamp,
+          sender: "ai",
+          type: "text",
+        });
+      }
+    }
+
+    console.log("Split message into", messages.length, "parts:", messages);
+    return messages;
+  };
+
+
+
+  const handleSendMessage = () => {
+    if (input.trim() === "" || currentConversation === null) return;
+
+    const newMessage = {
+      id: Date.now(),
+      text: input.trim(),
+      timestamp: Date.now(),
+      sender: "user",
+    };
+
+    setConversations((prevConversations) =>
+      prevConversations.map((conv) => {
+        if (conv.id === currentConversation) {
+          return {
+            ...conv,
+            messages: [...conv.messages, newMessage],
+          };
+        }
+        return conv;
+      })
+    );
+
+    updateConversationTitle(currentConversation, newMessage);
+
+    const messageText = input;
+    setInput("");
+
+    setIsTyping(true);
+    setTypingText("");
+    setActiveTypingConversation(currentConversation);
+
+    sendMessageToAPI(messageText, currentConversation);
+  };
+
+  const handleStopMessage = () => {
+    console.log("Stop button clicked - aborting current request");
+
+    const currentTypingConv = activeTypingConversation;
+
+    // Abort the current request if it exists
+    if (currentTypingConv && abortControllersRef.current[currentTypingConv]) {
+      abortControllersRef.current[currentTypingConv].abort();
+      delete abortControllersRef.current[currentTypingConv];
+    }
+
+    // Clear typing state
+    clearTypingAnimation();
+    setIsTyping(false);
+    setTypingText("");
+    setActiveTypingConversation(null);
+
+    // Clear any pending responses
+    if (currentTypingConv && pendingResponsesRef.current[currentTypingConv]) {
+      pendingResponsesRef.current[currentTypingConv].received = true;
+      clearTimeout(pendingResponsesRef.current[currentTypingConv].timeoutId);
+      delete pendingResponsesRef.current[currentTypingConv];
+    }
+
+    // Add a user-friendly stop message instead of an error
+    if (currentTypingConv) {
+      const stopMessage = {
+        id: Date.now(),
+        text: "Response generation stopped. You can send a new message below.",
+        timestamp: Date.now(),
+        sender: "system",
+        type: "stop"
+      };
+
+      setConversations((prevConversations) =>
+        prevConversations.map((conv) => {
+          if (conv.id === currentTypingConv) {
+            return {
+              ...conv,
+              messages: [...conv.messages, stopMessage],
+            };
+          }
+          return conv;
+        })
+      );
+    }
+
+    console.log("Request stopped successfully");
+  };
+
+  const handleKeyPress = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (isTyping && activeTypingConversation === currentConversation) {
+        handleStopMessage();
+      } else {
+        handleSendMessage();
+      }
+    }
+  };
+
+  const switchConversation = (convId) => {
+    console.log(`*** SWITCHING CONVERSATION *** From: ${currentConversation} To: ${convId}`);
+    clearTypingAnimation();
+    setIsTyping(false);
+    setTypingText("");
+    setActiveTypingConversation(null);
+    setCurrentConversation(convId);
+  };
+
+  const createNewConversation = () => {
+    const newId = uuidv4();
+    const newSessionId = generateSessionId();
+    console.log("*** CREATING NEW CONVERSATION ***");
+    const newConversation = {
+      id: newId,
+      title: "New Chat",
+      messages: [],
+      sessionId: newSessionId,
+    };
+    console.log(`*** NEW CONVERSATION CREATED *** ID: ${newId}, Session: ${newSessionId}`);
+    setConversations((prevConvs) => [...prevConvs, newConversation]);
+    setCurrentConversation(newId);
+    requestQueueRef.current = requestQueueRef.current.filter(
+      (id, index, self) => self.indexOf(id) === index
+    );
+  };
+
+  const testAPIConnection = async () => {
+    setConnectionError(false);
+
+    try {
+      console.log(`Testing API connection to ${API_URL}`);
+      setApiConnected(true);
+      console.log("API connection test successful");
+      return true;
+    } catch (error) {
+      console.error("Error testing API connection:", error);
+      setConnectionError(true);
+      setApiConnected(false);
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    testAPIConnection();
+    return () => {
+      Object.values(abortControllersRef.current).forEach(controller => {
+        controller.abort();
+      });
+      abortControllersRef.current = {};
+    };
+  }, []);
+  useEffect(() => {
+    return () => {
+      clearTypingAnimation();
+    };
+  }, []);
+
+
+
+  return (
+    <div className={`app-container ${darkMode ? "dark" : ""}`}>
+      <header className="app-header">
+        <div className="header-left">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="icon-button"
+          >
+            <FiMenu className="icon" />
+          </button>
+          <div className="app-title">
+            <span className="app-title-main">Commodities AI</span>
+            <span className="app-title-sub">by Kalyalabs</span>
+          </div>
+          <div
+            className={`connection-status ${
+              apiConnected ? "connected" : "disconnected"
+            }`}
+          >
+            {apiConnected ? (
+              <FiWifi className="icon-small" title="API Connected" />
+            ) : connectionError ? (
+              <button
+                onClick={() => testAPIConnection()}
+                className="reconnect-button"
+                title="Click to test connection"
+              >
+                <FiWifiOff className="icon-small" />
+                <span>Test Connection</span>
+              </button>
+            ) : (
+              <FiWifi className="icon-small" title="API Ready" />
+            )}
+          </div>
+        </div>
+        {/* <button
+          onClick={() => setTestMode(!testMode)}
+          className="icon-button"
+          title={testMode ? "Exit Test Mode" : "Enter Test Mode"}
+          style={{
+            backgroundColor: testMode ? '#4CAF50' : 'transparent',
+            color: testMode ? 'white' : 'inherit'
+          }}
+        >
+          🧪
+        </button> */}
+        <button onClick={toggleDarkMode} className="icon-button">
+          {darkMode ? <FiSun className="icon" /> : <FiMoon className="icon" />}
+        </button>
+      </header>
+
+      <div className="main-container">
+        {testMode ? (
+          <ChartTestComponent />
+        ) : (
+          <>
+        {sidebarOpen && (
+          <div className="sidebar">
+            <div className="sidebar-header">
+              <button
+                onClick={createNewConversation}
+                className="new-chat-button"
+              >
+                <FiPlus className="icon-small" />
+                <span>New Chat</span>
+              </button>
+            </div>
+            <div className="conversation-list">
+              {conversations.map((conv) => (
+                <div
+                  key={conv.id}
+                  onClick={() => switchConversation(conv.id)}
+                  className={`conversation-item ${
+                    currentConversation === conv.id ? "active" : ""
+                  }`}
+                >
+                  <span className="conversation-title">{conv.title}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {currentConversation === null ? (
+          <div className="chat-area-wrapper">
+            <div className="chat-container">
+              <div className="messages-container">
+                <div className="empty-state">
+                  <div className="empty-state-content">
+                    <h2 className="empty-state-title">
+                      Loading conversation...
+                    </h2>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <React.Fragment key={`fragment-${currentConversation}`}>
+            <div className="chat-area-wrapper">
+              <div className="chat-container">
+                <div className="messages-container">
+                  {currentMessages.length === 0 && !isTyping ? (
+                    <div className="empty-state">
+                      <div className="empty-state-content">
+                        <h2 className="empty-state-title">
+                          How can I help you today?
+                        </h2>
+                        <p>Ask me anything...</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {currentMessages.map((message) => {
+                        console.log("Rendering message:", message.id, "type:", message.type, "sender:", message.sender, "text preview:", message.text?.substring(0, 50));
+                        return (
+                        <div
+                          key={message.id}
+                          className={`message-wrapper ${
+                            message.sender === "user"
+                              ? "user-message"
+                              : message.sender === "system"
+                              ? "system-message"
+                              : "ai-message"
+                          }`}
+                        >
+                          {message.type === "clarification" ? (
+                            <ClarificationMessage
+                              message={message}
+                              formatTime={formatTime}
+                            />
+                          ) : message.type === "markdown_structured" ? (
+                            <MarkdownStructuredMessage
+                              message={message}
+                              formatTime={formatTime}
+                            />
+                          ) : (message.chart && message.rawData) || (message.chart && !message.rawData) ? (
+                            <ChartRenderer
+                              chartString={message.chart}
+                              rawData={message.rawData}
+                              message={message}
+                              formatTime={formatTime}
+                            />
+                          ) : message.rawData && !message.chart ? (
+                            <EnhancedMessage
+                              message={message}
+                              formatTime={formatTime}
+                            />
+                          ) : (
+                            <EnhancedMessage
+                              message={message}
+                              formatTime={formatTime}
+                            />
+                          )}
+                        </div>
+                        );
+                      })}
+                      {isTyping &&
+                        activeTypingConversation === currentConversation && (
+                          <div className="message-wrapper ai-message">
+                            <div className="message-bubble ai-bubble markdown">
+                              {typingText || (
+                                <div className="typing-indicator">
+                                  <span></span>
+                                  <span></span>
+                                  <span></span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                    </>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+                <div className="input-container">
+                  <div className="input-wrapper">
+                    <textarea
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={handleKeyPress}
+                      placeholder={
+                        isTyping && activeTypingConversation === currentConversation
+                          ? "AI is responding... Press Enter or click stop to cancel"
+                          : "Type a message..."
+                      }
+                      className="message-input"
+                      rows="3"
+                      disabled={isTyping && activeTypingConversation === currentConversation}
+                    />
+                    {isTyping && activeTypingConversation === currentConversation ? (
+                      <button
+                        onClick={handleStopMessage}
+                        className="send-button stop-button"
+                        title="Stop generation"
+                      >
+                        <FiSquare className="icon" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleSendMessage}
+                        disabled={input.trim() === ""}
+                        className={`send-button ${
+                          input.trim() === "" ? "disabled" : ""
+                        }`}
+                        title="Send message"
+                      >
+                        <FiSend className="icon" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </React.Fragment>
+        )}
+        </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default App;

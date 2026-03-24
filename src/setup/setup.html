@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Commodities AI Setup</title>
+    <link rel="stylesheet" href="setup.css" />
+    <style>
+      /* Ensure the body fills the entire window */
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background-color: #f5f5f5;
+      }
+
+      /* Add a loading spinner for initial load */
+      .loading-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        width: 100vw;
+      }
+
+      .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid rgba(0, 0, 0, 0.1);
+        border-radius: 50%;
+        border-top-color: #2563eb;
+        animation: spin 1s ease-in-out infinite;
+      }
+
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+
+      #setup-root {
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="setup-root">
+      <!-- Loading spinner shown until React loads -->
+      <div class="loading-container">
+        <div class="loading-spinner"></div>
+      </div>
+    </div>
+
+    <script>
+      // Renderer process
+      try {
+        const { ipcRenderer } = require('electron');
+        const React = require('react');
+        const ReactDOM = require('react-dom/client');
+
+        // Import the SetupScreen component
+        let SetupScreen;
+        try {
+          SetupScreen = require('./SetupScreen').default;
+          console.log('SetupScreen loaded successfully');
+        } catch (err) {
+          console.error('Error loading SetupScreen:', err);
+          document.body.innerHTML = `
+            <div style="padding: 20px; color: red;">
+              <h2>Error Loading Setup</h2>
+              <p>There was an error loading the setup screen: ${err.message}</p>
+              <pre>${err.stack}</pre>
+            </div>
+          `;
+        }
+
+        // Handle setup completion
+        const handleSetupComplete = (launchApp) => {
+          console.log('Setup complete, launch app:', launchApp);
+          ipcRenderer.send('installation-complete', launchApp);
+        };
+
+        // Wait for DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', () => {
+          console.log('DOM loaded, rendering React component');
+
+          if (SetupScreen) {
+            // Render the setup screen
+            const container = document.getElementById('setup-root');
+            const root = ReactDOM.createRoot(container);
+            root.render(React.createElement(SetupScreen, { onComplete: handleSetupComplete }));
+          }
+        });
+      } catch (err) {
+        console.error('Fatal error in setup renderer:', err);
+        document.body.innerHTML = `
+          <div style="padding: 20px; color: red;">
+            <h2>Fatal Error</h2>
+            <p>There was a fatal error initializing the setup: ${err.message}</p>
+            <pre>${err.stack}</pre>
+          </div>
+        `;
+      }
+    </script>
+  </body>
+</html>

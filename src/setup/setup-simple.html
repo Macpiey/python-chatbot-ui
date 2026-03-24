@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+  <title>AI Chat Setup</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f5f5;
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .setup-container {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      padding: 2rem;
+      max-width: 800px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .setup-header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .setup-header h1 {
+      font-size: 1.8rem;
+      margin-bottom: 0.5rem;
+      color: #2563eb;
+    }
+
+    .setup-header h2 {
+      font-size: 1.2rem;
+      font-weight: normal;
+      color: #666;
+    }
+
+    .setup-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .setup-step {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+    }
+
+    .setup-step.active {
+      display: flex;
+    }
+
+    .setup-step h3 {
+      font-size: 1.4rem;
+      margin-bottom: 1rem;
+      color: #2563eb;
+    }
+
+    .setup-step p {
+      margin-bottom: 1rem;
+      line-height: 1.5;
+    }
+
+    .text-container {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 1rem;
+      background-color: white;
+      height: 300px;
+      overflow-y: auto;
+      margin-bottom: 1rem;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      cursor: pointer;
+      margin-bottom: 1rem;
+    }
+
+    .checkbox-label input {
+      margin-top: 0.25rem;
+    }
+
+    .path-selector {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .path-selector input {
+      flex: 1;
+      padding: 0.5rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+
+    .path-selector button {
+      padding: 0.5rem 1rem;
+      background-color: #f0f0f0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .components-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .component-item {
+      padding: 0.75rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background-color: white;
+    }
+
+    .progress-container {
+      margin: 2rem 0;
+    }
+
+    .progress-bar {
+      height: 20px;
+      background-color: #e0e0e0;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background-color: #2563eb;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    .progress-text {
+      text-align: center;
+      font-weight: 500;
+    }
+
+    .setup-buttons {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 2rem;
+    }
+
+    .back-button,
+    .next-button,
+    .finish-button {
+      padding: 0.75rem 1.5rem;
+      border-radius: 4px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .back-button {
+      background-color: #f0f0f0;
+      border: 1px solid #ddd;
+      color: #333;
+    }
+
+    .back-button:hover {
+      background-color: #e0e0e0;
+    }
+
+    .next-button,
+    .finish-button {
+      background-color: #2563eb;
+      border: none;
+      color: white;
+      margin-left: auto;
+    }
+
+    .next-button:hover,
+    .finish-button:hover {
+      background-color: #1d4ed8;
+    }
+
+    .error-message {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background-color: #fee2e2;
+      color: #b91c1c;
+      border-radius: 4px;
+      border-left: 4px solid #ef4444;
+    }
+
+    /* Dark mode support */
+    @media (prefers-color-scheme: dark) {
+      body {
+        background-color: #1a1a1a;
+        color: #e0e0e0;
+      }
+      
+      .setup-header h1 {
+        color: #3b82f6;
+      }
+      
+      .setup-header h2 {
+        color: #aaa;
+      }
+      
+      .setup-step h3 {
+        color: #3b82f6;
+      }
+      
+      .text-container {
+        border-color: #444;
+        background-color: #222;
+      }
+      
+      .path-selector input {
+        background-color: #222;
+        border-color: #444;
+        color: #e0e0e0;
+      }
+      
+      .path-selector button {
+        background-color: #333;
+        border-color: #444;
+        color: #e0e0e0;
+      }
+      
+      .component-item {
+        border-color: #444;
+        background-color: #222;
+      }
+      
+      .back-button {
+        background-color: #333;
+        border-color: #444;
+        color: #e0e0e0;
+      }
+      
+      .error-message {
+        background-color: #471818;
+        color: #fca5a5;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="setup-container">
+    <div class="setup-header">
+      <h1>AI Chat Setup</h1>
+      <h2>Installation Wizard</h2>
+    </div>
+    
+    <div class="setup-content">
+      <!-- Welcome Step -->
+      <div class="setup-step active" id="step-welcome">
+        <h3>Welcome to AI Chat</h3>
+        <p>This wizard will guide you through the installation of AI Chat, your personal AI assistant.</p>
+        <p>AI Chat connects you with advanced language models to help answer questions, provide information, and assist with various tasks.</p>
+        <div class="app-info">
+          <p><strong>Version:</strong> 1.0.0</p>
+          <p><strong>Publisher:</strong> Your Company</p>
+          <p>© 2025 Your Company. All rights reserved.</p>
+        </div>
+      </div>
+      
+      <!-- License Step -->
+      <div class="setup-step" id="step-license">
+        <h3>License Agreement</h3>
+        <p>Please review and accept the terms of the license agreement to continue.</p>
+        <div class="text-container" id="license-text">
+          Loading license agreement...
+        </div>
+        <label class="checkbox-label">
+          <input type="checkbox" id="license-checkbox">
+          I accept the terms of the License Agreement
+        </label>
+      </div>
+      
+      <!-- Installation Step -->
+      <div class="setup-step" id="step-install">
+        <h3>Installing AI Chat</h3>
+        <p>Please wait while the application is being installed...</p>
+        <div class="progress-container">
+          <div class="progress-bar">
+            <div class="progress-fill" id="progress-bar"></div>
+          </div>
+          <p class="progress-text" id="progress-text">Preparing installation...</p>
+        </div>
+      </div>
+      
+      <!-- Finish Step -->
+      <div class="setup-step" id="step-finish">
+        <h3>Installation Complete</h3>
+        <p>AI Chat has been successfully installed on your computer.</p>
+        <p>Thank you for installing AI Chat!</p>
+        <label class="checkbox-label">
+          <input type="checkbox" id="launch-checkbox" checked>
+          Launch AI Chat now
+        </label>
+      </div>
+      
+      <div id="error-container"></div>
+      
+      <div class="setup-buttons">
+        <button id="back-button" class="back-button" style="display: none;">Back</button>
+        <button id="next-button" class="next-button">Next</button>
+        <button id="finish-button" class="finish-button" style="display: none;">Finish</button>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    const { ipcRenderer } = require('electron');
+    const fs = require('fs');
+    const path = require('path');
+    
+    // Elements
+    const steps = document.querySelectorAll('.setup-step');
+    const backButton = document.getElementById('back-button');
+    const nextButton = document.getElementById('next-button');
+    const finishButton = document.getElementById('finish-button');
+    const licenseCheckbox = document.getElementById('license-checkbox');
+    const launchCheckbox = document.getElementById('launch-checkbox');
+    const licenseText = document.getElementById('license-text');
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const errorContainer = document.getElementById('error-container');
+    
+    // State
+    let currentStep = 0;
+    const totalSteps = steps.length;
+    
+    // Load license text
+    try {
+      const licensePath = path.join(__dirname, 'license.txt');
+      if (fs.existsSync(licensePath)) {
+        licenseText.textContent = fs.readFileSync(licensePath, 'utf8');
+      } else {
+        licenseText.textContent = 'License agreement text would be loaded here.';
+      }
+    } catch (err) {
+      console.error('Error loading license:', err);
+      licenseText.textContent = 'Error loading license agreement.';
+    }
+    
+    // Show step
+    function showStep(stepIndex) {
+      steps.forEach((step, index) => {
+        if (index === stepIndex) {
+          step.classList.add('active');
+        } else {
+          step.classList.remove('active');
+        }
+      });
+      
+      // Update buttons
+      if (stepIndex === 0) {
+        backButton.style.display = 'none';
+      } else {
+        backButton.style.display = 'block';
+      }
+      
+      if (stepIndex === totalSteps - 1) {
+        nextButton.style.display = 'none';
+        finishButton.style.display = 'block';
+      } else {
+        nextButton.style.display = 'block';
+        finishButton.style.display = 'none';
+      }
+      
+      // Special case for installation step
+      if (stepIndex === 2) {
+        backButton.style.display = 'none';
+        nextButton.style.display = 'none';
+        simulateInstallation();
+      }
+    }
+    
+    // Simulate installation
+    function simulateInstallation() {
+      const steps = [
+        'Preparing installation...',
+        'Copying files...',
+        'Creating shortcuts...',
+        'Registering application...',
+        'Finalizing installation...'
+      ];
+      
+      let currentStepIndex = 0;
+      progressBar.style.width = '0%';
+      progressText.textContent = steps[0];
+      
+      const installInterval = setInterval(() => {
+        if (currentStepIndex < steps.length) {
+          const progress = Math.floor((currentStepIndex / steps.length) * 100);
+          progressBar.style.width = `${progress}%`;
+          progressText.textContent = steps[currentStepIndex];
+          currentStepIndex++;
+        } else {
+          clearInterval(installInterval);
+          progressBar.style.width = '100%';
+          progressText.textContent = 'Installation complete!';
+          setTimeout(() => {
+            currentStep++;
+            showStep(currentStep);
+          }, 1000);
+        }
+      }, 1500);
+    }
+    
+    // Show error
+    function showError(message) {
+      errorContainer.innerHTML = `<div class="error-message">${message}</div>`;
+    }
+    
+    // Clear error
+    function clearError() {
+      errorContainer.innerHTML = '';
+    }
+    
+    // Event listeners
+    backButton.addEventListener('click', () => {
+      if (currentStep > 0) {
+        currentStep--;
+        showStep(currentStep);
+        clearError();
+      }
+    });
+    
+    nextButton.addEventListener('click', () => {
+      // Validate current step
+      if (currentStep === 1 && !licenseCheckbox.checked) {
+        showError('You must accept the license agreement to continue.');
+        return;
+      }
+      
+      clearError();
+      currentStep++;
+      showStep(currentStep);
+    });
+    
+    finishButton.addEventListener('click', () => {
+      ipcRenderer.send('installation-complete', launchCheckbox.checked);
+    });
+    
+    // Initialize
+    showStep(currentStep);
+  </script>
+</body>
+</html>
