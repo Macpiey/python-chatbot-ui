@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Engagement Indicator Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #f9fafb;
+            padding: 20px;
+            margin: 0;
+        }
+        
+        .test-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .engagement-wrapper {
+            display: flex;
+            justify-content: flex-start;
+            padding: 8px 20px;
+            margin: 4px 0 8px 0;
+        }
+
+        .engagement-indicator {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        .engagement-content {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: linear-gradient(135deg,
+                rgba(139, 92, 246, 0.08) 0%,
+                rgba(6, 182, 212, 0.06) 100%);
+            border-radius: 16px;
+            padding: 10px 16px;
+            border: 1px solid rgba(139, 92, 246, 0.12);
+            backdrop-filter: blur(10px);
+            box-shadow:
+                0 2px 8px rgba(139, 92, 246, 0.08),
+                0 1px 3px rgba(0, 0, 0, 0.05);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .engagement-dots {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .engagement-dots span {
+            height: 5px;
+            width: 5px;
+            background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+            border-radius: 50%;
+            display: inline-block;
+            opacity: 0.8;
+            animation: engagementPulse 1.6s infinite ease-in-out;
+            box-shadow: 0 1px 3px rgba(139, 92, 246, 0.3);
+        }
+        
+        .engagement-dots span:nth-child(1) {
+            animation-delay: 0s;
+        }
+        
+        .engagement-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .engagement-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        .engagement-text {
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+            background: linear-gradient(
+                90deg,
+                #8b5cf6 0%,
+                #06b6d4 50%,
+                #8b5cf6 100%
+            );
+            background-size: 200% 100%;
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation:
+                textFadeIn 0.6s ease-in,
+                gradientShift 3s ease-in-out infinite;
+            position: relative;
+        }
+        
+        @keyframes engagementPulse {
+            0%, 80%, 100% {
+                transform: scale(0.8);
+                opacity: 0.5;
+            }
+            40% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes textFadeIn {
+            0% {
+                opacity: 0;
+                transform: translateY(2px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes gradientShift {
+            0% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
+            100% {
+                background-position: 0% 50%;
+            }
+        }
+        
+        @keyframes fadeIn {
+            0% {
+                opacity: 0;
+            }
+            100% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h2>Engagement Indicator Test</h2>
+        <p>This shows how the new engagement indicator will look:</p>
+        
+        <div class="engagement-wrapper">
+            <div class="engagement-indicator">
+                <div class="engagement-content">
+                    <div class="engagement-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                    <span class="engagement-text" id="message-text">Thinking...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const messages = [
+            "Thinking...",
+            "Analyzing your request...",
+            "Processing information...",
+            "Gathering insights...",
+            "Preparing response...",
+            "Reviewing data...",
+            "Formulating answer...",
+            "Connecting the dots...",
+            "Exploring possibilities...",
+            "Synthesizing information...",
+            "Crafting response...",
+            "Almost ready...",
+            "Finalizing thoughts...",
+            "Organizing insights...",
+            "Compiling results...",
+            "Working on it...",
+            "Just a moment...",
+            "Putting it together...",
+            "Nearly there...",
+            "Generating response..."
+        ];
+        
+        let currentIndex = 0;
+        const messageElement = document.getElementById('message-text');
+        
+        setInterval(() => {
+            currentIndex = (currentIndex + 1) % messages.length;
+            messageElement.textContent = messages[currentIndex];
+        }, 3000); // Change every 3 seconds for demo (actual will be 15 seconds)
+    </script>
+</body>
+</html>

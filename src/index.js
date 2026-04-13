@@ -1,14 +1,26 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('node:path');
+const UpdateManager = require('./services/updateManager');
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
   app.quit();
 }
 
+// Create a named mutex so Inno Setup can detect the running app
+// and close it during silent updates (matches AppMutex in inno-setup.iss)
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.kalyalabs.commoditiesai');
+}
+// The app name used as the window title is how Inno's CloseApplications finds us.
+// The AppMutex 'CommoditiesAI_SingleInstance' is checked by Inno Setup.
+
+let mainWindow = null;
+let updateManager = null;
+
 const createWindow = () => {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
@@ -25,6 +37,18 @@ const createWindow = () => {
   if (process.env.NODE_ENV === 'development') {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
+
+  // Initialize the auto-update manager
+  updateManager = new UpdateManager(mainWindow);
+  updateManager.startPeriodicChecks();
+
+  mainWindow.on('closed', () => {
+    if (updateManager) {
+      updateManager.destroy();
+      updateManager = null;
+    }
+    mainWindow = null;
+  });
 };
 
 // This method will be called when Electron has finished
@@ -50,6 +74,3 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and import them here.

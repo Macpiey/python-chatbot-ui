@@ -18,6 +18,13 @@ const config = {
   
   // Quick reports API (AWS endpoint - same for both environments)
   quickReportsApiUrl: "https://h3mpcj10p8.execute-api.ap-south-1.amazonaws.com/dev/read",
+
+  // Auto-update configuration (GitHub Releases API)
+  githubOwner: "Macpiey",
+  githubRepo: "python-chatbot-ui",
+  get updateCheckUrl() {
+    return `https://api.github.com/repos/${this.githubOwner}/${this.githubRepo}/releases/latest`;
+  },
   
   // Other configuration options
   get environment() {

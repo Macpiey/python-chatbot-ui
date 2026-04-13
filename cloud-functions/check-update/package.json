@@ -1,0 +1,10 @@
+{
+  "name": "check-update",
+  "version": "1.0.0",
+  "description": "Cloud Function for Commodities AI auto-update system",
+  "main": "index.js",
+  "dependencies": {
+    "@google-cloud/functions-framework": "^3.0.0",
+    "@google-cloud/storage": "^7.0.0"
+  }
+}

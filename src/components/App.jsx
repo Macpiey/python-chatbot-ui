@@ -16,6 +16,7 @@ import {
   FiCopy,
   FiSidebar,
   FiTrendingUp,
+  FiRefreshCw,
 } from "react-icons/fi";
 import EnhancedMessage from "./EnhancedMessage";
 import ChartRenderer from "./ChartRenderer";
@@ -29,6 +30,7 @@ import UserMessage from "./UserMessage";
 import ThinkingIndicator from "./ThinkingIndicator";
 import AIModelsDropdown from "./AIModelsDropdown";
 import CombinedForecastDropdown from "./CombinedForecastDropdown";
+import UpdateModal from "./UpdateModal";
 
 import authService from "../services/authService";
 import apiService from "../services/apiService";
@@ -79,6 +81,10 @@ function App() {
   const [connectionError, setConnectionError] = useState(false);
   const [testMode, setTestMode] = useState(false);
   const [currentSuggestions, setCurrentSuggestions] = useState([]);
+
+  // App version state
+  const [appVersion, setAppVersion] = useState('');
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   // Split-view state management
   const [isSplitViewActive, setIsSplitViewActive] = useState(false);
@@ -205,6 +211,30 @@ function App() {
 
     return unsubscribe;
   }, []);
+
+  // Fetch app version on mount
+  useEffect(() => {
+    if (window.updater) {
+      window.updater.getCurrentVersion().then((version) => {
+        console.log('[App] App version:', version);
+        setAppVersion(version);
+      });
+    }
+  }, []);
+
+  // Manual check for updates handler
+  const handleCheckForUpdates = useCallback(() => {
+    if (window.updater && !isCheckingUpdate) {
+      setIsCheckingUpdate(true);
+      console.log('[App] Manual update check triggered');
+      window.updater.checkForUpdate().then((result) => {
+        console.log('[App] Manual update check result:', result);
+        setIsCheckingUpdate(false);
+      }).catch(() => {
+        setIsCheckingUpdate(false);
+      });
+    }
+  }, [isCheckingUpdate]);
 
   useEffect(() => {
     if (messagesEndRef.current && !isSwitchingViews) {
@@ -1701,6 +1731,9 @@ function App() {
 
   return (
     <div className={`app-container ${darkMode ? "dark" : ""}`}>
+      {/* Auto-update modal */}
+      <UpdateModal darkMode={darkMode} />
+
       <header className="app-header">
         <div className="header-left">
           <div className="app-title">
@@ -1796,6 +1829,52 @@ function App() {
                     >
                       <FiLogOut className="logout-icon" />
                       <span>Logout</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Version info + Check for Updates */}
+                {appVersion && (
+                  <div style={{
+                    padding: '8px 16px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    borderTop: '1px solid var(--gray-200)',
+                  }}>
+                    <span style={{
+                      fontSize: '11px',
+                      color: 'var(--gray-400)',
+                      fontWeight: '500',
+                      letterSpacing: '0.02em',
+                    }}>
+                      v{appVersion}
+                    </span>
+                    <button
+                      onClick={handleCheckForUpdates}
+                      disabled={isCheckingUpdate}
+                      title="Check for updates"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: isCheckingUpdate ? 'wait' : 'pointer',
+                        color: 'var(--gray-400)',
+                        padding: '2px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '11px',
+                        opacity: isCheckingUpdate ? 0.5 : 0.7,
+                        transition: 'opacity 0.15s ease',
+                      }}
+                    >
+                      <FiRefreshCw
+                        size={12}
+                        style={{
+                          animation: isCheckingUpdate ? 'spin 1s linear infinite' : 'none',
+                        }}
+                      />
+                      <span>{isCheckingUpdate ? 'Checking...' : 'Check updates'}</span>
                     </button>
                   </div>
                 )}

@@ -51,10 +51,14 @@ try {
     process.exit(1);
   }
 
-  console.log(`Inno Setup found at ${isccPath}. Building installer...`);
+  // Read version from package.json (single source of truth)
+  const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'));
+  const appVersion = packageJson.version;
 
-  // Build the installer
-  execSync(`"${isccPath}" "${scriptPath}"`, { stdio: 'inherit' });
+  console.log(`Inno Setup found at ${isccPath}. Building installer for v${appVersion}...`);
+
+  // Build the installer, passing version as a define
+  execSync(`"${isccPath}" /DMyAppVersion="${appVersion}" "${scriptPath}"`, { stdio: 'inherit' });
 
   console.log(`Installer created successfully at ${outputPath}`);
 } catch (error) {

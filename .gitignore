@@ -90,3 +90,9 @@ typings/
 
 # Electron-Forge
 out/
+
+# GCP service account keys (never commit)
+**/gcp-sa-key.json
+
+# Release temp files
+.release-notes-tmp.md
